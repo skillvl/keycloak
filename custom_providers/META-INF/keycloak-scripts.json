@@ -1,0 +1,9 @@
+{
+    "policies": [
+        {
+            "name": "Resourcer Owner Policy",
+            "fileName": "resource_owner_policy.js",
+            "description": "A policy that grants access only to the resource owner"
+        }
+    ]
+}

@@ -1,0 +1,253 @@
+openapi: 3.1.0
+info:
+  version: 1.0.1
+  title: Keycloak (20.0.1) API
+  description: A subset of the Keycloak API to easily autogenerate clients
+
+security:
+  - bearerAuth: []
+
+paths:
+  /realms/{realm}/account/resources/{resourceId}/permissions:
+    parameters:
+      - name: realm
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: resourceId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags:
+        - Resource Permission
+      summary: Get the permissions other users have for the resource
+      operationId: "account_resources_permissions__get"
+      responses:
+        '200':
+          $ref: '#/components/responses/UserResourcePermissions'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          description: User is not owner of the resource or resource does not exist.
+          content:
+            application/json:
+              schema:
+                title: KeycloakError
+                type: object
+                required:
+                  - error
+                properties:
+                  error:
+                    type: string
+              example: {"error": "resource_not_found"}
+    put:
+      tags:
+        - Resource Permission
+      summary: Change the permissions other users have for the resource
+      operationId: "account_resources_permissions__put"
+      requestBody:
+        $ref: '#/components/requestBodies/UserResourcePermissionsChange'
+      responses:
+        '204':
+          description: Successful response
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          description: User is not owner of the resource, resource does not exist or a user does not exist.
+          content:
+            application/json:
+              schema:
+                title: KeycloakError
+                type: object
+                required:
+                  - error
+                properties:
+                  error:
+                    type: string
+              examples:
+                resourceNotFound:
+                  summary: Resource does not exist / User is not owner of resource
+                  value: { "error": "resource_not_found" }
+                userDoesNotExist:
+                  summary: User does not exist
+                  value: { "error": "username" }
+
+  /realms/{realm}/account/resources/{resourceId}/user:
+    parameters:
+      - name: realm
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: resourceId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: value
+        in: query
+        required: true
+        schema:
+          type: string
+    get:
+      tags:
+        - Resource Permission
+      summary: Check if user with given name/e-mail exists
+      operationId: "account_resources_user__get"
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  title: User
+                  type: object
+                  required:
+                    - username
+                    - firstName
+                    - lastName
+                  properties:
+                    username:
+                      type: string
+                    firstName:
+                      type: string
+                    lastName:
+                      type: string
+                    email:
+                      type: string
+        '204':
+          description: User does not exist
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      description: UMA Authorization
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  responses:
+    UserResourcePermissions:
+      description: Successful response
+      content:
+        application/json:
+          schema:
+            type: array
+            items:
+              title: UserResourcePermission
+              type: object
+              required:
+                - username
+                - firstName
+                - lastName
+                - scopes
+              properties:
+                username:
+                  type: string
+                firstName:
+                  type: string
+                lastName:
+                  type: string
+                email:
+                  type: string
+                scopes:
+                  type: array
+                  items:
+                    type: string
+          examples:
+            multiplePermissions:
+              summary: Multiple users with permissions
+              value:
+                [
+                  {
+                    "username": "example.lecturer",
+                    "firstName": "Max",
+                    "lastName": "Mustermann",
+                    "email": "max.mustermann@example.com",
+                    "scopes": [
+                      "view",
+                      "delete"
+                    ]
+                  },
+                  {
+                    "username": "student",
+                    "firstName": "stu",
+                    "lastName": "dent",
+                    "scopes": [
+                      "view"
+                    ]
+                  }
+                ]
+            noUserPermissions:
+              summary: No other user has permissions for this resource
+              value: []
+    UnauthorizedError:
+      description: User is not authenticated successfully
+      content:
+        application/json:
+          schema:
+            title: UnauthorizedError
+            type: object
+            required:
+              - error
+            properties:
+              error:
+                type: string
+          example: { "error": "HTTP 401 Unauthorized" }
+  requestBodies:
+    UserResourcePermissionsChange:
+      content:
+        application/json:
+          schema:
+            type: array
+            items:
+              title: UserResourcePermissionChange
+              type: object
+              required:
+                - username
+                - scopes
+              properties:
+                username:
+                  type: string
+                scopes:
+                  type: array
+                  items:
+                    type: string
+          examples:
+            changePermissions:
+              summary: Change user Permissions
+              value:
+                [
+                  {
+                    "username": "max.mustermann@example.com",
+                    "scopes": [
+                      "view",
+                      "delete"
+                    ]
+                  },
+                  {
+                    "username": "student",
+                    "scopes": [
+                      "view"
+                    ]
+                  }
+                ]
+            deletePermissions:
+              summary: Delete User Permissions
+              value:
+                [
+                  {
+                    "username": "max.mustermann@example.com",
+                    "scopes": []
+                  },
+                  {
+                    "username": "student",
+                    "scopes": []
+                  }
+                ]

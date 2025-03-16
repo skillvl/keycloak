@@ -1,0 +1,191 @@
+# Local Proxmox Middleware test
+@resource-id = virtualroom-123
+
+###
+# group: User
+# @name Student login
+POST {{keycloak-server}}/realms/{{realm}}/protocol/openid-connect/token
+Content-Type: application/x-www-form-urlencoded
+
+client_id = TESTCLIENT_ID &
+username = TESTUSERNAME_STUDENT &
+password = TESTPASSWORD_STUDENT &
+grant_type = password
+
+> {%
+    client.global.set("access_token", response.body.access_token);
+    import {parseJWT} from './scripts';
+    console.log(parseJWT(response.body.access_token));
+%}
+
+###
+# group: User
+# @name Lecturer login
+POST {{keycloak-server}}/realms/{{realm}}/protocol/openid-connect/token
+Content-Type: application/x-www-form-urlencoded
+
+client_id = TESTCLIENT_ID &
+username = TESTUSERNAME_LECTURER &
+password = TESTUSERNAME_LECTURER &
+grant_type = password
+
+> {%
+    client.global.set("access_token", response.body.access_token);
+    import {parseJWT} from './scripts';
+    console.log(parseJWT(response.body.access_token));
+%}
+
+###
+# group: Permission
+# @name get RPT for PT
+# User sends request for a Requesting Party Token (RPT) with the given permission ticket.
+POST {{keycloak-server}}/realms/{{realm}}/protocol/openid-connect/token
+Authorization: Bearer {{access_token}}
+Content-Type: application/x-www-form-urlencoded
+
+grant_type = urn:ietf:params:oauth:grant-type:uma-ticket &
+ticket = {{permission-ticket}} &
+response_include_resource_name = true
+
+> {% client.global.set("access_token", response.body.access_token); %}
+
+
+###
+# group: Permission
+# @name Get Permissions of Resource
+GET {{keycloak-server}}/realms/{{realm}}/account/resources/{{resource-id}}/permissions
+Authorization: Bearer {{access_token}}
+Content-Type: application/json
+
+
+###
+# group: Permission
+# @name Delete Permissions of Resource
+PUT {{keycloak-server}}/realms/{{realm}}/account/resources/{{resource-id}}/permissions
+Authorization: Bearer {{access_token}}
+Content-Type: application/json
+
+[
+  {
+    "username": "max.mustermann@example.com",
+    "scopes": []
+  },
+  {
+    "username": "student",
+    "scopes": []
+  }
+]
+
+
+###
+# group: Permission
+# @name Change Permissions of Resource
+PUT {{keycloak-server}}/realms/{{realm}}/account/resources/{{resource-id}}/permissions
+Authorization: Bearer {{access_token}}
+Content-Type: application/json
+
+[
+  {
+    "username": "max.mustermann@example.com",
+    "scopes": ["view"]
+  },
+  {
+    "username": "student",
+    "scopes": ["view"]
+  }
+]
+
+###
+# group: Permission
+# @name Check if User exists
+< {% request.variables.set('user', encodeURIComponent("max.mustermann@example.com")) %}
+GET {{keycloak-server}}/realms/{{realm}}/account/resources/{{resource-id}}/user?
+    value={{user}}
+Authorization: Bearer {{access_token}}
+Content-Type: application/json
+
+###
+# group: Fastapi Middleware
+# @name Get all permissions for access_token user
+# get all permissions the current user has
+POST {{keycloak-server}}/realms/{{realm}}/protocol/openid-connect/token
+Authorization: Bearer {{access_token}}
+Content-Type: application/x-www-form-urlencoded
+
+grant_type = urn:ietf:params:oauth:grant-type:uma-ticket &
+audience = BACKENDCLIENT_ID
+//permission = #view &
+//response_mode=permissions &
+//response_mode=decision
+
+> {% client.global.set("access_token", response.body.access_token); %}
+
+###
+# group: FastAPI Middleware
+# @name Fastapi-Middleware request PAT
+# fastapi  middleware requests its protection API token (PAT).
+POST {{keycloak-server}}/realms/{{realm}}/protocol/openid-connect/token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type = client_credentials &
+client_id = TESTCLIENT_ID &
+client_secret = {{fastapi-client-secret}}
+
+> {% client.global.set("fastapi-pat-token", response.body.access_token); %}
+
+###
+# group: FastAPI Middleware
+# @name PT VNC virtualroom-vm
+# fastapi  middleware requests a permission ticket for its protected resource.
+POST {{keycloak-server}}/realms/{{realm}}/authz/protection/permission
+Authorization: Bearer {{fastapi-pat-token}}
+Content-Type: application/json
+
+[
+  {
+    "resource_id": "virtualroom-123-vm-123",
+    "resource_scopes": [
+      "view"
+    ]
+  }
+]
+
+> {% client.global.set("permission-ticket", response.body.access_token) %}
+
+###
+# group: FastAPI Middleware
+# @name delete virtualroom resource
+DELETE {{keycloak-server}}/realms/{{realm}}/authz/protection/resource_set/virtualroomtemplate-123
+
+###
+# group: FastAPI Middleware
+# @name create virtualroomtemplate resource
+POST {{keycloak-server}}/realms/{{realm}}/authz/protection/resource_set
+Content-Type: application/json
+
+{
+  "ownerManagedAccess": true,
+  "owner": "TESTUSERNAME_LECTURER",
+  "type": "virtual room template",
+  "_id": "virtualroomtemplate-123",
+  "name": "virtualroomtemplate-123",
+  "resource_scopes": [
+    "view",
+    "edit",
+    "delete"
+  ]
+}
+
+###
+# group: FastAPI Middleware
+# @name get owner permissions
+# get all permissions the current user has
+GET {{keycloak-server}}/realms/{{realm}}/authz/protection/resource_set?
+    scope=view&
+    owner=TESTUSERNAME_LECTURER&
+    type=virtual room
+Content-Type: application/x-www-form-urlencoded
+
+> {%
+    // TODO: you can add here Response handler
+%}
